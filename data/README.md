@@ -19,11 +19,13 @@ We use the following signed network datasets:
 Each dataset can be downloaded from its corresponding SNAP page.
 Please download the raw edge list files and place them under `data/raw/`.
 
-Example:
+### Expected directory structure
+
+```text
 data/raw/
-├── soc-sign-bitcoin-alpha.txt
-├── soc-sign-bitcoin-otc.txt
-├── wiki-Elec.txt
-├── wiki-RfA.txt
-├── soc-sign-Slashdot090221.txt
-└── soc-sign-epinions.txt
+ ├── soc-sign-bitcoin-alpha.txt
+ ├── soc-sign-bitcoin-otc.txt
+ ├── wiki-Elec.txt
+ ├── wiki-RfA.txt
+ ├── soc-sign-Slashdot090221.txt
+ └── soc-sign-epinions.txt
