@@ -185,7 +185,10 @@ def run_all():
     process_snap_static("Epinions", "soc-sign-epinions.txt")
 
 
-def run_one(dataset: str):
+def run_one(dataset: str) -> Path:
+    """
+    Process a single dataset and save it under `data/interim/<dataset>/edge_list.csv`.
+    """
     if dataset == "bitcoinalpha":
         return process_bitcoin("bitcoinalpha")
     if dataset == "bitcoinotc":
@@ -203,8 +206,9 @@ def run_one(dataset: str):
 
 if __name__ == "__main__":
     import sys
-    ds = sys.argv[1] if len(sys.argv) > 1 else None
-    if ds is None or ds == "all":
+
+    ds = sys.argv[1] if len(sys.argv) > 1 else "all"
+    if ds == "all":
         run_all()
     else:
         run_one(ds)
