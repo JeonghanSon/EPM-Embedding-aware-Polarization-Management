@@ -322,14 +322,20 @@ def main():
 
 if __name__ == "__main__":
     import sys
-    ds = sys.argv[1] if len(sys.argv) > 1 else None
-    if ds is None or ds == "all":
+
+    ds = sys.argv[1] if len(sys.argv) > 1 else "all"
+
+    if ds == "all":
         main()
     else:
-        # decide split type by dataset name (same lists as in main)
         temporal = {"bitcoinalpha", "bitcoinotc", "wiki-RfA", "wiki-Elec"}
+        static = {"Slashdot", "Epinions"}
+
         if ds in temporal:
             split_temporal_split_then_dedup(ds)
-        else:
+        elif ds in static:
             split_static(ds)
+        else:
+            raise ValueError(f"Unknown dataset: {ds}")
+
 
