@@ -117,8 +117,10 @@ def run_all() -> None:
 
 if __name__ == "__main__":
     import sys
-    ds = sys.argv[1] if len(sys.argv) > 1 else None
-    if ds is None or ds == "all":
+
+    ds = sys.argv[1] if len(sys.argv) > 1 else "all"
+    if ds == "all":
         run_all()
     else:
         build(ds)
+
