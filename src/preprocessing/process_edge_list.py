@@ -185,5 +185,26 @@ def run_all():
     process_snap_static("Epinions", "soc-sign-epinions.txt")
 
 
+def run_one(dataset: str):
+    if dataset == "bitcoinalpha":
+        return process_bitcoin("bitcoinalpha")
+    if dataset == "bitcoinotc":
+        return process_bitcoin("bitcoinotc")
+    if dataset == "wiki-RfA":
+        return process_wiki_rfa()
+    if dataset == "wiki-Elec":
+        return process_wiki_elec()
+    if dataset == "Slashdot":
+        return process_snap_static("Slashdot", "soc-sign-Slashdot090221.txt")
+    if dataset == "Epinions":
+        return process_snap_static("Epinions", "soc-sign-epinions.txt")
+    raise ValueError(f"Unknown dataset: {dataset}")
+
+
 if __name__ == "__main__":
-    run_all()
+    import sys
+    ds = sys.argv[1] if len(sys.argv) > 1 else None
+    if ds is None or ds == "all":
+        run_all()
+    else:
+        run_one(ds)
