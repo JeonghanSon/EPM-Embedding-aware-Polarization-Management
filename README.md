@@ -16,3 +16,6 @@ Preprocessing can be executed using the provided script:
 
 ```bash
 bash scripts/run_preprocessing.sh
+
+Supported datasets:
+bitcoinalpha, bitcoinotc, wiki-RfA, wiki-Elec, Slashdot, Epinions.
