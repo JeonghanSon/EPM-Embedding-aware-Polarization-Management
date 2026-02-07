@@ -150,9 +150,17 @@ def estimate_num_communities(
 
 
 def main():
-    datasets = ["bitcoinalpha", "bitcoinotc", "wiki-RfA", "wiki-Elec" "Slashdot", "Epinions"]
+    import sys
+    ds = sys.argv[1] if len(sys.argv) > 1 else None
+
+    if ds is None or ds == "all":
+        datasets = ["bitcoinalpha", "bitcoinotc", "wiki-RfA", "wiki-Elec"]
+    else:
+        datasets = [ds]
+
     for d in datasets:
         estimate_num_communities(d)
+
 
 
 if __name__ == "__main__":
