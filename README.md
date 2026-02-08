@@ -36,6 +36,16 @@ Optional arguments:
 bash scripts/run_measurement.sh --datasets "bitcoinalpha bitcoinotc" --neg-scale 0.2
 ```
 
+## Mitigation Preparation
+
+To prepare gray-zone information for mitigation (community clustering, PCS pairs, and gray-node scores), run:
+
+```bash
+bash scripts/run_mitigation_prep.sh
+```
+
+By default, the script runs on the bitcoinalpha dataset with seed 0.
+Large datasets (e.g., Slashdot, Epinions) are handled automatically using the large-scale PCS pipeline.
 
 
 
