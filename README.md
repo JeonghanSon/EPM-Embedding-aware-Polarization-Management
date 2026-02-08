@@ -48,4 +48,22 @@ By default, the script runs on the bitcoinalpha dataset with seed 0.
 Large datasets (e.g., Slashdot, Epinions) are handled automatically using the large-scale PCS pipeline.
 
 
+## Mitigation
+
+After preprocessing and base measurement, gray-zone–based mitigation can be executed with:
+
+```bash
+bash scripts/run_mitigation.sh
+```
+
+By default, the script runs a single representative mitigation setting on the bitcoinalpha dataset
+with seed 0, and summarizes the results together with a comparison against the base model.
+
+To run mitigation on other datasets or multiple seeds, use the optional arguments:
+```bash
+bash scripts/run_mitigation.sh --datasets "bitcoinalpha bitcoinotc" --seeds "0 1"
+```
+
+
+
 
