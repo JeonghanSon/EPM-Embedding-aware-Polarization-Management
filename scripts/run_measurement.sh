@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 # -------------------------
 # Defaults (reviewer-friendly)
 # -------------------------
-SEEDS=(0 1 2 3 4)
+SEEDS=(0)
 DATASETS=("bitcoinalpha")
 NEG_SCALE="0.1"
 
