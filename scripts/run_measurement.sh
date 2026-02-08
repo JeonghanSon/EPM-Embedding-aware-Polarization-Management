@@ -108,4 +108,11 @@ for seed in "${SEEDS[@]}"; do
 done
 
 echo ""
-echo "✅ Measurement finished"
+echo "📌 Summarizing base results"
+python -m src.analysis.summarize_base
+
+echo ""
+echo "📌 Output files"
+echo "  - Base deltas:   ${RESULTS_DIR:-results}/base_deltas.csv"
+echo "  - Base best:     ${RESULTS_DIR:-results}/best_embeddings.csv"
+echo "  - Base summary:  ${RESULTS_DIR:-results}/summary_base.csv"
