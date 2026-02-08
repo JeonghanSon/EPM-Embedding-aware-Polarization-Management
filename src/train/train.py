@@ -191,9 +191,13 @@ def main():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--datasets", nargs="+", default=["bitcoinalpha"])
     p.add_argument("--epochs", type=int, default=400)
-    p.add_argument("--embedding_dims", nargs="+", type=int, default=[32, 64, 128])
-    p.add_argument("--num_layers", nargs="+", type=int, default=[2, 3, 4])
-    p.add_argument("--lrs", nargs="+", type=float, default=[0.05, 0.01, 0.005, 0.001, 0.0005])
+
+    # Default to a single configuration (reviewer-friendly),
+    # while still allowing multiple values via CLI.
+    p.add_argument("--embedding_dims", nargs="+", type=int, default=[64])
+    p.add_argument("--num_layers", nargs="+", type=int, default=[2])
+    p.add_argument("--lrs", nargs="+", type=float, default=[0.01])
+
     args = p.parse_args()
 
     set_seed(args.seed)
