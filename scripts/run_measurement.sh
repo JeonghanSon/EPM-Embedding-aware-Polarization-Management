@@ -111,8 +111,13 @@ echo ""
 echo "📌 Summarizing base results"
 python -m src.analysis.summarize_base
 
-echo ""
-echo "📌 Output files"
-echo "  - Base deltas:   ${RESULTS_DIR:-results}/base_deltas.csv"
-echo "  - Base best:     ${RESULTS_DIR:-results}/best_embeddings.csv"
-echo "  - Base summary:  ${RESULTS_DIR:-results}/summary_base.csv"
+python - <<'PY'
+from src.utils.paths import RESULTS_BASE
+print("")
+print("📌 Output files")
+print(f"  - RESULTS_BASE:  {RESULTS_BASE}")
+print(f"  - base_deltas:   {RESULTS_BASE / 'base_deltas.csv'}")
+print(f"  - best_embeddings: {RESULTS_BASE / 'best_embeddings.csv'}")
+print(f"  - summary_base:  {RESULTS_BASE / 'summary_base.csv'}")
+PY
+
