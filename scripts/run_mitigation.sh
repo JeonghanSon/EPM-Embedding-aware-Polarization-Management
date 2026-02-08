@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # scripts/run_mitigation.sh
-# Mitigation pipeline:
-#   1) gray_connect -> augmented train edges
-#   2) train_gray   -> best embedding/model on augmented graph
-#   3) compute_deltas_gray -> gray delta
-#   4) write a simple summary CSV (no auto-selection)
+# Mitigation pipeline (after mitigation prep):
+#   1) gray_connect
+#   2) train_gray
+#   3) compute_deltas_gray
+#   4) summarize_gray (+ compare vs base)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -17,17 +17,16 @@ DATASETS=("bitcoinalpha")
 NEG_SCALE="0.1"
 DO_GRID=0
 
-# Large datasets: use fixed params only (no grid recommendation)
+# Large datasets: fixed params only (no grid)
 LARGE_DATASETS=("Epinions" "Slashdot")
 
-# Fixed mitigation config (not exposed; matches your paper usage)
+# Fixed mitigation config (implicit; not exposed)
 GRAY_MODE="avg"
 SCOPE="global"
 PAIR_SELECTOR="threshold"
-TOPK=""          # None
 SETTING="none"
 
-# Default paper parameters (shown as tau, d_max, gamma)
+# Paper parameters (notation: tau, d_max, gamma)
 TAU_SMALL="0.7"
 D_MAX_SMALL="3"
 GAMMA_SMALL="1.0"
@@ -48,12 +47,14 @@ Usage: bash scripts/run_mitigation.sh [options]
 Options:
   --seeds "0 1 2"              Seeds (space-separated). Default: "${SEEDS[*]}"
   --datasets "bitcoinalpha"    Datasets (space-separated). Default: "${DATASETS[*]}"
-  --neg-scale 0.1              neg_scale used for delta computation. Default: ${NEG_SCALE}
-  --grid                       Run recommended grid on non-large datasets.
+  --neg-scale 0.1              neg_scale for delta computation. Default: ${NEG_SCALE}
+  --grid                       Run recommended grid (non-large datasets only)
   -h, --help                   Show this help and exit.
 
 Notes:
-  - Large datasets (Epinions/Slashdot) use fixed (tau,d_max,gamma) and ignore --grid.
+  - Run mitigation preparation first:
+      bash scripts/run_mitigation_prep.sh
+  - Large datasets (Epinions/Slashdot) always use fixed parameters.
 
 Examples:
   bash scripts/run_mitigation.sh
@@ -81,7 +82,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --grid)
       DO_GRID=1
-      shift 1
+      shift
       ;;
     -h|--help)
       usage
@@ -118,7 +119,6 @@ run_one() {
   echo "  (paper params) tau=${tau} d_max=${dmax} gamma=${gamma} | neg_scale=${NEG_SCALE}"
   echo "============================================================"
 
-  # 1) Build augmented train edges
   python -m src.gray.gray_connect \
     --dataset "${ds}" \
     --seed "${seed}" \
@@ -130,7 +130,6 @@ run_one() {
     --setting "${SETTING}" \
     --edge_scale "${gamma}"
 
-  # 2) Train on augmented edges (grid inside train_gray is kept as-is; we are not changing it here)
   python -m src.train.train_gray \
     --dataset "${ds}" \
     --seed "${seed}" \
@@ -142,7 +141,6 @@ run_one() {
     --setting "${SETTING}" \
     --edge_scale "${gamma}"
 
-  # 3) Compute gray delta
   python -m src.delta.compute_deltas_gray \
     --dataset "${ds}" \
     --seed "${seed}" \
@@ -161,7 +159,6 @@ echo "Mitigation Pipeline"
 echo "  SEEDS     = ${SEEDS[*]}"
 echo "  DATASETS  = ${DATASETS[*]}"
 echo "  NEG_SCALE = ${NEG_SCALE}"
-echo "  MODE      = ${GRAY_MODE}/${SCOPE}/${PAIR_SELECTOR}/${SETTING}"
 echo "  GRID      = ${DO_GRID}"
 echo "============================================================"
 echo ""
@@ -172,7 +169,6 @@ echo ""
 for seed in "${SEEDS[@]}"; do
   for ds in "${DATASETS[@]}"; do
     if is_large_dataset "${ds}"; then
-      # fixed only
       run_one "${ds}" "${seed}" "${TAU_LARGE}" "${D_MAX_LARGE}" "${GAMMA_LARGE}"
     else
       if [[ "${DO_GRID}" -eq 1 ]]; then
@@ -184,123 +180,34 @@ for seed in "${SEEDS[@]}"; do
           done
         done
       else
-        # single representative setting
         run_one "${ds}" "${seed}" "${TAU_SMALL}" "${D_MAX_SMALL}" "${GAMMA_SMALL}"
       fi
     fi
   done
 done
 
-# -------------------------
-# Lightweight summary (no selection)
-# -------------------------
+echo ""
+echo "📌 Summarizing gray results (+ compare vs base)"
+python -m src.analysis.summarize_gray \
+  --base_summary "$(python - <<'PY'
+from src.utils.paths import RESULTS_BASE
+print(RESULTS_BASE / "summary_base.csv")
+PY
+)" \
+  --print
+
 python - <<'PY'
-from __future__ import annotations
-
-import json
-from pathlib import Path
-
-import pandas as pd
-
-from src.utils.paths import RESULTS_GRAY
-
-out_path = RESULTS_GRAY / "mitigation_summary.csv"
-out_path.parent.mkdir(parents=True, exist_ok=True)
-
-rows = []
-
-# Collect per-run best metrics + delta + connect summary if present
-for dataset_dir in RESULTS_GRAY.iterdir():
-    if not dataset_dir.is_dir():
-        continue
-    dataset = dataset_dir.name
-    if dataset in ("laplacian_cache",):  # skip non-dataset folders if any
-        continue
-
-    # Walk configs
-    for cfg_dir in dataset_dir.glob("gray_scale=*/scope=*/pair=*/normalize=*/escale_*/seed*"):
-        if not cfg_dir.is_dir():
-            continue
-
-        # parse seed
-        try:
-            seed = int(cfg_dir.name.replace("seed", ""))
-        except Exception:
-            seed = None
-
-        best_metrics_path = cfg_dir / "best_metrics.json"
-        gray_results_path = cfg_dir / "gray_results.csv"
-
-        # config parts from path
-        parts = cfg_dir.parts
-        # .../<dataset>/gray_scale=.../scope=.../pair=.../normalize=.../escale_.../seedX
-        gray_mode = cfg_dir.parents[4].name.split("=", 1)[1] if len(cfg_dir.parents) >= 5 else None
-        scope = cfg_dir.parents[3].name.split("=", 1)[1] if len(cfg_dir.parents) >= 4 else None
-        pair = cfg_dir.parents[2].name.split("=", 1)[1] if len(cfg_dir.parents) >= 3 else None
-        setting = cfg_dir.parents[1].name.split("=", 1)[1] if len(cfg_dir.parents) >= 2 else None
-        escale = cfg_dir.parents[0].name  # escale_...
-
-        val_f1 = test_f1 = val_acc = test_acc = None
-        if best_metrics_path.exists():
-            try:
-                with open(best_metrics_path, "r", encoding="utf-8") as f:
-                    m = json.load(f)
-                val_f1 = m.get("val_f1", None)
-                test_f1 = m.get("test_f1", None)
-                val_acc = m.get("val_accuracy", None)
-                test_acc = m.get("test_accuracy", None)
-            except Exception:
-                pass
-
-        selected_pairs = num_edges_added = None
-        if gray_results_path.exists():
-            try:
-                df = pd.read_csv(gray_results_path)
-                if not df.empty:
-                    selected_pairs = df.get("selected_pairs", None)
-                    if selected_pairs is None and "community_1" in df.columns:
-                        selected_pairs = int(df["community_1"].nunique() > 0)  # fallback, not used usually
-                    if "num_edges_added" in df.columns:
-                        num_edges_added = int(df["num_edges_added"].sum())
-            except Exception:
-                pass
-
-        rows.append({
-            "dataset": dataset,
-            "seed": seed,
-            "gray_mode": gray_mode,
-            "scope": scope,
-            "pair": pair,
-            "setting": setting,
-            "escale_dir": escale,
-            "val_f1": val_f1,
-            "test_f1": test_f1,
-            "val_accuracy": val_acc,
-            "test_accuracy": test_acc,
-            "selected_pairs": selected_pairs,
-            "num_edges_added": num_edges_added,
-            "run_dir": str(cfg_dir),
-        })
-
-# Join with gray_deltas.csv (already aggregated by compute_deltas_gray)
-gray_deltas = RESULTS_GRAY / "gray_deltas.csv"
-if gray_deltas.exists():
-    try:
-        ddf = pd.read_csv(gray_deltas)
-        # use a wide join key based on config columns present in gray_deltas.csv
-        key = ["dataset","seed","gray_mode","scope","pair_selector","minmax","max_degree","topk","setting","edge_scale","neg_scale"]
-        # map rows to key columns where possible; keep summary lightweight (no hard failure)
-        sdf = pd.DataFrame(rows)
-        # if missing columns, just save summary without join
-        if all(k in ddf.columns for k in key):
-            # parse from run_dir not attempted; just attach gray_deltas separately
-            # (users can inspect gray_deltas.csv directly)
-            pass
-    except Exception:
-        pass
-
-pd.DataFrame(rows).to_csv(out_path, index=False)
-print(f"✅ saved: {out_path}")
+from src.utils.paths import RESULTS_BASE, RESULTS_GRAY
+print("")
+print("📌 Output files")
+print(f"  - RESULTS_GRAY:        {RESULTS_GRAY}")
+print(f"  - gray_deltas:         {RESULTS_GRAY / 'gray_deltas.csv'}")
+print(f"  - best_embeddings:     {RESULTS_GRAY / 'best_embeddings.csv'}")
+print(f"  - summary_gray:        {RESULTS_GRAY / 'summary_gray.csv'}")
+print(f"  - compare_base_gray:   {RESULTS_GRAY / 'compare_base_gray.csv'}")
+print("")
+print("📌 Base summary (used for comparison)")
+print(f"  - summary_base:        {RESULTS_BASE / 'summary_base.csv'}")
 PY
 
 echo ""
