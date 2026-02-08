@@ -94,10 +94,11 @@ def main():
     p.add_argument("--setting", choices=["none", "l2"], required=True)
     p.add_argument("--edge_scale", type=float, required=True)
 
-    #  grid hyperparams (base처럼)
-    p.add_argument("--embedding_dims", nargs="+", type=int, default=[32, 64, 128])
-    p.add_argument("--num_layers", nargs="+", type=int, default=[2, 3, 4])
-    p.add_argument("--lrs", nargs="+", type=float, default=[0.05, 0.01, 0.005, 0.001, 0.0005])
+    # Default to a single configuration (reviewer-friendly),
+    # while still allowing multiple values via CLI.
+    p.add_argument("--embedding_dims", nargs="+", type=int, default=[64])
+    p.add_argument("--num_layers", nargs="+", type=int, default=[2])
+    p.add_argument("--lrs", nargs="+", type=float, default=[0.01])
 
     p.add_argument("--epochs", type=int, default=400)
     p.add_argument("--patience", type=int, default=10)
@@ -138,7 +139,6 @@ def main():
         print(f"⏭️  Already exists (skip): {out_dir}  (use --overwrite)")
         return
 
-
     train_tag = (
         f"gray_{args.gray_mode}_{args.scope}_{args.pair_selector}"
         f"_mm{int(round(args.minmax*100))}"
@@ -155,7 +155,6 @@ def main():
 
     best_row = None
     best_val_f1 = -1.0
-    rows = []
 
     try:
         for dim in list(args.embedding_dims):
@@ -202,7 +201,6 @@ def main():
                         "test_accuracy": metrics.get("test_accuracy", np.nan),
                         "test_f1": metrics.get("test_f1", np.nan),
                     }
-                    rows.append(row)
 
                     val_f1 = row["val_f1"]
                     if val_f1 is not None and not pd.isna(val_f1) and float(val_f1) > best_val_f1:
@@ -247,7 +245,6 @@ def main():
     finally:
         shutil.rmtree(tmp_root, ignore_errors=True)
 
-    # upsert best summary CSV (best only)
     best_csv = RESULTS_GRAY / "best_embeddings.csv"
     key_cols = ["dataset", "seed", "gray_mode", "scope", "pair_selector", "minmax", "max_degree", "topk", "setting", "edge_scale"]
     upsert_best_csv(best_csv, best_row, key_cols)
