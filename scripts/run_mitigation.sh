@@ -15,9 +15,13 @@ cd "$(dirname "$0")/.."
 SEEDS=(0)
 DATASETS=("bitcoinalpha")
 NEG_SCALE="0.1"
-DO_GRID=0
 
-# Large datasets: fixed params only (no grid)
+# Optional: allow multiple settings (advanced usage)
+TAUS=()
+D_MAXS=()
+GAMMAS=()
+
+# Large datasets: fixed defaults (no grid recommendation)
 LARGE_DATASETS=("Epinions" "Slashdot")
 
 # Fixed mitigation config (implicit; not exposed)
@@ -26,7 +30,7 @@ SCOPE="global"
 PAIR_SELECTOR="threshold"
 SETTING="none"
 
-# Paper parameters (notation: tau, d_max, gamma)
+# Representative paper parameters (tau, d_max, gamma)
 TAU_SMALL="0.7"
 D_MAX_SMALL="3"
 GAMMA_SMALL="1.0"
@@ -34,11 +38,6 @@ GAMMA_SMALL="1.0"
 TAU_LARGE="0.2"
 D_MAX_LARGE="4"
 GAMMA_LARGE="1.0"
-
-# Recommended grid (small/medium datasets only)
-GRID_TAUS=("0.7" "0.8" "0.9")
-GRID_DMAX=("2" "3")
-GRID_GAMMA=("0.5" "1.0" "1.5")
 
 usage() {
   cat <<EOF
@@ -48,18 +47,25 @@ Options:
   --seeds "0 1 2"              Seeds (space-separated). Default: "${SEEDS[*]}"
   --datasets "bitcoinalpha"    Datasets (space-separated). Default: "${DATASETS[*]}"
   --neg-scale 0.1              neg_scale for delta computation. Default: ${NEG_SCALE}
-  --grid                       Run recommended grid (non-large datasets only)
+
+  # Advanced: override tau/d_max/gamma (space-separated lists in quotes)
+  --tau "0.7 0.8 0.9"          Override tau values (optional)
+  --d-max "2 3"                Override d_max values (optional)
+  --gamma "0.5 1.0 1.5"        Override gamma values (optional)
+
   -h, --help                   Show this help and exit.
 
 Notes:
   - Run mitigation preparation first:
       bash scripts/run_mitigation_prep.sh
-  - Large datasets (Epinions/Slashdot) always use fixed parameters.
+  - For large datasets (Epinions/Slashdot), the script always uses:
+      tau=${TAU_LARGE}, d_max=${D_MAX_LARGE}, gamma=${GAMMA_LARGE}
+    even if --tau/--d-max/--gamma are provided.
 
 Examples:
   bash scripts/run_mitigation.sh
   bash scripts/run_mitigation.sh --datasets "bitcoinalpha bitcoinotc"
-  bash scripts/run_mitigation.sh --datasets "wiki-Elec" --grid
+  bash scripts/run_mitigation.sh --datasets "wiki-Elec" --tau "0.7 0.8" --d-max "2 3" --gamma "0.5 1.0"
 EOF
 }
 
@@ -80,9 +86,17 @@ while [[ $# -gt 0 ]]; do
       NEG_SCALE="${2:-}"
       shift 2
       ;;
-    --grid)
-      DO_GRID=1
-      shift
+    --tau)
+      read -r -a TAUS <<< "${2:-}"
+      shift 2
+      ;;
+    --d-max|--d_max)
+      read -r -a D_MAXS <<< "${2:-}"
+      shift 2
+      ;;
+    --gamma)
+      read -r -a GAMMAS <<< "${2:-}"
+      shift 2
       ;;
     -h|--help)
       usage
@@ -159,9 +173,19 @@ echo "Mitigation Pipeline"
 echo "  SEEDS     = ${SEEDS[*]}"
 echo "  DATASETS  = ${DATASETS[*]}"
 echo "  NEG_SCALE = ${NEG_SCALE}"
-echo "  GRID      = ${DO_GRID}"
 echo "============================================================"
 echo ""
+
+# If user did not specify tau/d_max/gamma, use single representative defaults (small datasets)
+if [[ ${#TAUS[@]} -eq 0 ]]; then
+  TAUS=("${TAU_SMALL}")
+fi
+if [[ ${#D_MAXS[@]} -eq 0 ]]; then
+  D_MAXS=("${D_MAX_SMALL}")
+fi
+if [[ ${#GAMMAS[@]} -eq 0 ]]; then
+  GAMMAS=("${GAMMA_SMALL}")
+fi
 
 # -------------------------
 # Run
@@ -169,19 +193,16 @@ echo ""
 for seed in "${SEEDS[@]}"; do
   for ds in "${DATASETS[@]}"; do
     if is_large_dataset "${ds}"; then
+      # fixed only
       run_one "${ds}" "${seed}" "${TAU_LARGE}" "${D_MAX_LARGE}" "${GAMMA_LARGE}"
     else
-      if [[ "${DO_GRID}" -eq 1 ]]; then
-        for tau in "${GRID_TAUS[@]}"; do
-          for dmax in "${GRID_DMAX[@]}"; do
-            for gamma in "${GRID_GAMMA[@]}"; do
-              run_one "${ds}" "${seed}" "${tau}" "${dmax}" "${gamma}"
-            done
+      for tau in "${TAUS[@]}"; do
+        for dmax in "${D_MAXS[@]}"; do
+          for gamma in "${GAMMAS[@]}"; do
+            run_one "${ds}" "${seed}" "${tau}" "${dmax}" "${gamma}"
           done
         done
-      else
-        run_one "${ds}" "${seed}" "${TAU_SMALL}" "${D_MAX_SMALL}" "${GAMMA_SMALL}"
-      fi
+      done
     fi
   done
 done
