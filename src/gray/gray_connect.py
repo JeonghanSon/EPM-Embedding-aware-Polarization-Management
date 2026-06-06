@@ -54,7 +54,12 @@ def _mode_reduce(a: int, b: int, mode: str) -> int:
     raise ValueError(mode)
 
 
-def _compute_global_targets(gray_mode: str, communities: Dict[int, List[int]], src_pos: np.ndarray, trg_pos: np.ndarray) -> tuple[int, int]:
+def _compute_global_targets(
+    gray_mode: str,
+    communities: Dict[int, List[int]],
+    src_pos: np.ndarray,
+    trg_pos: np.ndarray,
+) -> tuple[int, int]:
     intra_list = []
     for nodes in communities.values():
         arr = np.asarray(nodes, dtype=int)
@@ -66,7 +71,14 @@ def _compute_global_targets(gray_mode: str, communities: Dict[int, List[int]], s
         ci = np.asarray(communities[comm_ids[i]], dtype=int)
         for j in range(i + 1, len(comm_ids)):
             cj = np.asarray(communities[comm_ids[j]], dtype=int)
-            inter_list.append(int(np.sum((np.isin(src_pos, ci) & np.isin(trg_pos, cj)) | (np.isin(src_pos, cj) & np.isin(trg_pos, ci)))))
+            inter_list.append(
+                int(
+                    np.sum(
+                        (np.isin(src_pos, ci) & np.isin(trg_pos, cj))
+                        | (np.isin(src_pos, cj) & np.isin(trg_pos, ci))
+                    )
+                )
+            )
 
     def reduce_list(xs: list[int]) -> int:
         if not xs:
@@ -80,32 +92,44 @@ def _compute_global_targets(gray_mode: str, communities: Dict[int, List[int]], s
     return reduce_list(intra_list), reduce_list(inter_list)
 
 
-def _compute_global_k_nodes(gray_mode: str, num_nodes_seen: int, num_communities: int) -> int:
-    if num_communities <= 0:
+def _compute_global_k_nodes(gray_mode: str, communities: Dict[int, List[int]]) -> int:
+    sizes = [len(nodes) for nodes in communities.values()]
+    if not sizes:
         return 0
-    base = float(num_nodes_seen) / float(num_communities)
+
     if gray_mode == "min":
-        return int(np.floor(base))
+        return int(min(sizes))
     if gray_mode == "avg":
-        return int(round(base))
+        return int(round(float(np.mean(sizes))))
     if gray_mode == "max":
-        return int(np.ceil(base))
+        return int(max(sizes))
+
     raise ValueError(gray_mode)
 
 
-def _select_pairs(df_pairs: pd.DataFrame, minmax_th: float, max_degree: float, pair_selector: str, topk: int | None) -> list[pd.Series]:
+def _select_pairs(
+    df_pairs: pd.DataFrame,
+    minmax_th: float,
+    max_degree: float,
+    pair_selector: str,
+    topk: int | None,
+) -> list[pd.Series]:
     dmin = df_pairs["delta"].min()
     dmax = df_pairs["delta"].max()
+
     if pd.isna(dmin) or pd.isna(dmax) or dmax <= dmin:
         df_pairs = df_pairs.assign(delta_norm=1.0)
     else:
         df_pairs = df_pairs.assign(delta_norm=(df_pairs["delta"] - dmin) / (dmax - dmin))
 
     cand = df_pairs[df_pairs["delta_norm"] >= float(minmax_th)].copy()
+
     c1 = cand["community_1"].astype(int)
     c2 = cand["community_2"].astype(int)
     lo, hi = np.minimum(c1, c2), np.maximum(c1, c2)
-    cand = cand.assign(_lo=lo, _hi=hi).sort_values(["delta", "_lo", "_hi"], ascending=[False, True, True])
+    cand = cand.assign(_lo=lo, _hi=hi).sort_values(
+        ["delta", "_lo", "_hi"], ascending=[False, True, True]
+    )
 
     from collections import defaultdict
     deg_cap = defaultdict(int)
@@ -123,12 +147,13 @@ def _select_pairs(df_pairs: pd.DataFrame, minmax_th: float, max_degree: float, p
     return selected
 
 
-def _read_gray_scores(dataset: str, seed: int, c1: int, c2: int, setting: str) -> pd.DataFrame | None:
-    p1 = RESULTS_GRAY / dataset / f"seed{seed}" / "aug" / "gray_node" / f"pair_{c1}_{c2}.csv"
-    p2 = RESULTS_GRAY / dataset / f"seed{seed}" / "aug" / "gray_node" / f"pair_{c2}_{c1}.csv"
+def _read_gray_scores(model: str, dataset: str, seed: int, c1: int, c2: int, setting: str) -> pd.DataFrame | None:
+    p1 = RESULTS_GRAY / model / dataset / f"seed{seed}" / "aug" / "gray_node" / f"pair_{c1}_{c2}.csv"
+    p2 = RESULTS_GRAY / model / dataset / f"seed{seed}" / "aug" / "gray_node" / f"pair_{c2}_{c1}.csv"
     p = p1 if p1.exists() else (p2 if p2.exists() else None)
     if p is None:
         return None
+
     df = pd.read_csv(p)
     if "normalize" in df.columns:
         df = df[df["normalize"].astype(str) == str(setting)].copy()
@@ -146,10 +171,11 @@ def _dir_selector(pair_selector: str, minmax_th: float, max_degree: float, topk:
 
 def _dir_escale(edge_scale: float) -> str:
     v = int(round(edge_scale * 100))
-    return f"escale_{v//100}p{v%100:02d}"
+    return f"escale_{v//100}p{v % 100:02d}"
 
 
 def save_dir(
+    model: str,
     dataset: str,
     seed: int,
     gray_mode: str,
@@ -163,6 +189,7 @@ def save_dir(
 ) -> Path:
     return (
         RESULTS_GRAY
+        / model
         / dataset
         / f"gray_scale={gray_mode}"
         / f"scope={scope}"
@@ -175,6 +202,7 @@ def save_dir(
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--model", type=str, default="sgcn")
     ap.add_argument("--dataset", required=True)
     ap.add_argument("--seed", type=int, required=True)
 
@@ -193,18 +221,31 @@ def main():
 
     set_seed(int(args.seed))
 
-    dataset = args.dataset
+    model = str(args.model)
+    dataset = str(args.dataset)
     seed = int(args.seed)
-    gray_mode = args.gray_mode
-    scope = args.scope
-    pair_selector = args.pair_selector
+    gray_mode = str(args.gray_mode)
+    scope = str(args.scope)
+    pair_selector = str(args.pair_selector)
     minmax_th = float(args.minmax)
     max_degree = float(args.max_degree)
     topk = args.topk
     setting = str(args.setting)
     edge_scale = float(args.edge_scale)
 
-    out_dir = save_dir(dataset, seed, gray_mode, scope, pair_selector, minmax_th, max_degree, topk, setting, edge_scale)
+    out_dir = save_dir(
+        model=model,
+        dataset=dataset,
+        seed=seed,
+        gray_mode=gray_mode,
+        scope=scope,
+        pair_selector=pair_selector,
+        minmax_th=minmax_th,
+        max_degree=max_degree,
+        topk=topk,
+        setting=setting,
+        edge_scale=edge_scale,
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
 
     aug_out = out_dir / "train_edge_list_aug.csv"
@@ -213,7 +254,7 @@ def main():
     lock = FileLock(str(out_dir / ".write.lock"))
 
     if aug_out.exists() and new_only_out.exists() and summary_out.exists() and not args.overwrite:
-        print(f"⏭️  Already exists (skip): {out_dir}  (use --overwrite)")
+        print(f"⏭️ Already exists (skip): {out_dir}  (use --overwrite)")
         return
 
     train_path = DATA_SPLITS / dataset / "train_edge_list.csv"
@@ -228,11 +269,11 @@ def main():
     src_pos = edge_df["source"].to_numpy()[pos_mask]
     trg_pos = edge_df["target"].to_numpy()[pos_mask]
 
-    comm_path = RESULTS_GRAY / dataset / f"seed{seed}" / "aug" / "kmeans_community.csv"
+    comm_path = RESULTS_GRAY / model / dataset / f"seed{seed}" / "aug" / "kmeans_community.csv"
     communities = load_communities(comm_path, min_size=MIN_COMM_SIZE)
     num_communities = len(communities)
 
-    pcs_path = RESULTS_GRAY / dataset / f"seed{seed}" / "aug" / "pcs" / "delta_pairs.csv"
+    pcs_path = RESULTS_GRAY / model / dataset / f"seed{seed}" / "aug" / "pcs" / "delta_pairs.csv"
     pcs_df = pd.read_csv(pcs_path)
     pcs_df = pcs_df[
         pcs_df["community_1"].astype(int).isin(communities.keys())
@@ -243,9 +284,10 @@ def main():
 
     if len(selected) == 0:
         with lock:
-            pd.DataFrame(columns=["source", "target", "weight"]).to_csv(aug_out, index=False)
+            edge_df.to_csv(aug_out, index=False)
             pd.DataFrame(columns=["source", "target", "weight"]).to_csv(new_only_out, index=False)
             pd.DataFrame([{
+                "model": model,
                 "dataset": dataset,
                 "seed": seed,
                 "gray_mode": gray_mode,
@@ -259,6 +301,7 @@ def main():
                 "selected_pairs": 0,
                 "num_nodes_seen": num_nodes_seen,
                 "num_communities": num_communities,
+                "num_edges_added_total": 0,
             }]).to_csv(summary_out, index=False)
         print(f"✅ Saved empty artifacts: {out_dir}")
         return
@@ -272,7 +315,7 @@ def main():
     gray_k_global = 0
     if scope == "global":
         target_intra_g, target_inter_g = _compute_global_targets(gray_mode, communities, src_pos, trg_pos)
-        gray_k_global = _compute_global_k_nodes(gray_mode, num_nodes_seen, num_communities)
+        gray_k_global = _compute_global_k_nodes(gray_mode, communities)
 
     summary_rows = []
 
@@ -280,7 +323,7 @@ def main():
         c1_id, c2_id = int(row["community_1"]), int(row["community_2"])
         c1_nodes, c2_nodes = communities[c1_id], communities[c2_id]
 
-        gray_df = _read_gray_scores(dataset, seed, c1_id, c2_id, setting)
+        gray_df = _read_gray_scores(model, dataset, seed, c1_id, c2_id, setting)
         if gray_df is None or gray_df.empty:
             continue
 
@@ -328,7 +371,8 @@ def main():
         for u, v in gg_pairs[: min(int(target_gg), len(gg_pairs))]:
             all_edges.append((u, v, SIGN_NEW))
             new_edges.append((u, v, SIGN_NEW))
-            edge_set_local.add((u, v)); edge_set_local.add((v, u))
+            edge_set_local.add((u, v))
+            edge_set_local.add((v, u))
             gg_add += 1
 
         target_gC1 = int(max(0, target_gC1))
@@ -336,17 +380,20 @@ def main():
 
         c1_pairs = [(g, t) for g in gray_nodes for t in c1_nodes if (g, t) not in edge_set_local and (t, g) not in edge_set_local]
         c2_pairs = [(g, t) for g in gray_nodes for t in c2_nodes if (g, t) not in edge_set_local and (t, g) not in edge_set_local]
-        random.shuffle(c1_pairs); random.shuffle(c2_pairs)
+        random.shuffle(c1_pairs)
+        random.shuffle(c2_pairs)
 
         picked = c1_pairs[: min(target_gC1, len(c1_pairs))] + c2_pairs[: min(target_gC2, len(c2_pairs))]
         gc_add = 0
         for u, v in picked:
             all_edges.append((u, v, SIGN_NEW))
             new_edges.append((u, v, SIGN_NEW))
-            edge_set_local.add((u, v)); edge_set_local.add((v, u))
+            edge_set_local.add((u, v))
+            edge_set_local.add((v, u))
             gc_add += 1
 
         rec = {
+            "model": model,
             "dataset": dataset,
             "seed": seed,
             "gray_mode": gray_mode,
