@@ -6,10 +6,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# -------------------------
+# Defaults
+# -------------------------
 SEEDS=(0)
 DATASETS=("bitcoinalpha")
 NEG_SCALE="0.1"
 
+# Datasets that should use the large-graph PCS pipeline.
 LARGE_DATASETS=("Slashdot" "Epinions")
 
 usage() {
@@ -20,16 +24,21 @@ Options:
   --seeds "0 1 2"              Seeds. Default: "${SEEDS[*]}"
   --datasets "bitcoinalpha"    Datasets. Default: "${DATASETS[*]}"
   --neg-scale 0.1              Negative edge scale for PCS. Default: ${NEG_SCALE}
+
   -h, --help                   Show this help and exit.
 
 Examples:
   bash scripts/run_mitigation_prep.sh
   bash scripts/run_mitigation_prep.sh --datasets "bitcoinalpha bitcoinotc"
+  bash scripts/run_mitigation_prep.sh --datasets "wiki-Elec wiki-RfA" --seeds "0"
   bash scripts/run_mitigation_prep.sh --datasets "Slashdot Epinions"
   bash scripts/run_mitigation_prep.sh --seeds "0 1 2 3 4" --datasets "bitcoinalpha"
 EOF
 }
 
+# -------------------------
+# Parse CLI args
+# -------------------------
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --seeds)
@@ -80,7 +89,9 @@ for seed in "${SEEDS[@]}"; do
     echo "============================================================"
     echo "[KMEANS] dataset=${ds} seed=${seed}"
     echo "============================================================"
-    python -m src.gray.kmeans --dataset "${ds}" --seed "${seed}"
+    python -m src.gray.kmeans \
+      --dataset "${ds}" \
+      --seed "${seed}"
 
     echo "============================================================"
     if is_large_dataset "${ds}"; then
