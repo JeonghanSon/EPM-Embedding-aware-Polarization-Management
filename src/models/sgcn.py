@@ -91,7 +91,20 @@ class SGCNForSignLinkClass(nn.Module):
         z = z.to(self.device)
         src = src.to(self.device)
         dst = dst.to(self.device)
-        emb_pair = torch.cat([z[src], z[dst]], dim=1)  # [E, 2H]
+
+        zu = z[src]
+        zv = z[dst]
+
+        # Symmetric pair representation for undirected signed edges.
+        # This gives the same representation for (u, v) and (v, u).
+        emb_pair = torch.cat(
+            [
+                torch.abs(zu - zv),
+                zu * zv,
+            ],
+            dim=1,
+        )  # [E, 2H]
+
         return self.lin(emb_pair)  # [E, 3]
 
     def discriminate_z(
