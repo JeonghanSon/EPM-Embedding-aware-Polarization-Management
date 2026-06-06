@@ -103,9 +103,9 @@ def main():
 
     # Default to a single configuration (reviewer-friendly),
     # while still allowing multiple values via CLI.
-    p.add_argument("--embedding_dims", nargs="+", type=int, default=[64])
-    p.add_argument("--num_layers", nargs="+", type=int, default=[2])
-    p.add_argument("--lrs", nargs="+", type=float, default=[0.01])
+    p.add_argument("--embedding_dims", nargs="+", type=int, default=[128])
+    p.add_argument("--num_layers", nargs="+", type=int, default=[4])
+    p.add_argument("--lrs", nargs="+", type=float, default=[0.001])
 
     p.add_argument("--epochs", type=int, default=400)
     p.add_argument("--patience", type=int, default=10)
