@@ -219,7 +219,7 @@ def train_sgcn_for_signlink_class(
     epochs: int = 400,
     lr: float = 0.01,
     patience: int = 10,
-    seed: int = 42,
+    seed: int = 0,
     num_communities=None,
     x: torch.Tensor | None = None,
     train_edge_csv: str | Path | None = None,
