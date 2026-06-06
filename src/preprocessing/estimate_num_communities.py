@@ -11,8 +11,8 @@ from src.preprocessing.community_detection.run_signed_louvain import run_signed_
 
 MIN_COMM_SIZE = 30
 MIN_COMM_SIZE_BY_DATASET = {
-    "Slashdot": 500,   # adjust if needed
-    "Epinions": 500,   # adjust if needed
+    "Slashdot": 500,
+    "Epinions": 500,
 }
 
 
