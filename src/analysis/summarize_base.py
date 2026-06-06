@@ -43,10 +43,10 @@ def main():
     best_path = Path(args.best)
     out_path = Path(args.out)
 
-    df_d = _read_csv(deltas_path, ["dataset", "seed", "neg_scale", "k", "base_delta"])
+    df_d = _read_csv(deltas_path, ["model", "dataset", "seed", "neg_scale", "k", "base_delta"])
     df_b = _read_csv(
         best_path,
-        ["dataset", "seed", "num_communities", "val_accuracy", "val_f1", "test_accuracy", "test_f1"],
+        ["model", "dataset", "seed", "num_communities", "val_accuracy", "val_f1", "test_accuracy", "test_f1"],
     )
 
     # sanitize types
@@ -63,15 +63,16 @@ def main():
     df_d = df_d.dropna(subset=["dataset", "seed", "neg_scale"]).copy()
     df_b = df_b.dropna(subset=["dataset", "seed"]).copy()
 
-    df_b = df_b[["dataset", "seed", "num_communities", "val_accuracy", "val_f1", "test_accuracy", "test_f1"]]
-    df_d = df_d[["dataset", "seed", "neg_scale", "k", "base_delta"]]
+    df_b = df_b[["model", "dataset", "seed", "num_communities", "val_accuracy", "val_f1", "test_accuracy", "test_f1"]]
+    df_d = df_d[["model", "dataset", "seed", "neg_scale", "k", "base_delta"]]
 
     # merge: delta rows (dataset,seed,neg_scale) + perf rows (dataset,seed)
-    df = df_d.merge(df_b, on=["dataset", "seed"], how="left")
+    df = df_d.merge(df_b, on=["model", "dataset", "seed"], how="left")
 
-    g = df.groupby(["dataset", "neg_scale"], dropna=False)
+    g = df.groupby(["model", "dataset", "neg_scale"], dropna=False)
 
     out = pd.DataFrame({
+        "model": g["model"].first(),
         "dataset": g["dataset"].first(),
         "neg_scale": g["neg_scale"].first(),
 
