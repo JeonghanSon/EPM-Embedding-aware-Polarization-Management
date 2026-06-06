@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # src/delta/compute_deltas_gray.py
-# gray delta: (aug train edges + gray best_z) -> PCA(k) -> RMS -> delta (solver-only)
+# gray delta: (aug train edges + gray best_z) -> PCA(k) -> node-wise L2 -> delta (solver-only)
 
 from __future__ import annotations
 
