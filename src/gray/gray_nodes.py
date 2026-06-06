@@ -7,7 +7,6 @@ import argparse
 import json
 import ast
 from pathlib import Path
-from collections import defaultdict
 from typing import List, Tuple
 
 import numpy as np
@@ -30,8 +29,8 @@ def load_k(dataset: str) -> int:
     return int(k)
 
 
-def load_best_z(dataset: str, seed: int) -> torch.Tensor:
-    p = RESULTS_BASE / dataset / f"seed{seed}" / "best_z.pt"
+def load_best_z(model: str, dataset: str, seed: int) -> torch.Tensor:
+    p = RESULTS_BASE / model / dataset / f"seed{seed}" / "best_z.pt"
     z = torch.load(p, map_location="cpu")
     if isinstance(z, dict):
         z = next(iter(z.values()))
@@ -40,9 +39,10 @@ def load_best_z(dataset: str, seed: int) -> torch.Tensor:
     return z.detach().cpu().float()
 
 
-def load_kmeans_communities(dataset: str, seed: int) -> dict[int, list[int]]:
-    p = RESULTS_GRAY / dataset / f"seed{seed}" / "aug" / "kmeans_community.csv"
+def load_kmeans_communities(model: str, dataset: str, seed: int) -> dict[int, list[int]]:
+    p = RESULTS_GRAY / model / dataset / f"seed{seed}" / "aug" / "kmeans_community.csv"
     df = pd.read_csv(p)
+
     comms: dict[int, list[int]] = {}
     for _, r in df.iterrows():
         cid = int(r["community_id"])
@@ -60,13 +60,13 @@ def load_kmeans_communities(dataset: str, seed: int) -> dict[int, list[int]]:
 def pca_k(z: torch.Tensor, k: int, cache_dir: Path) -> np.ndarray:
     """
     PCA projection to k dims (raw).
-    Cache mean/W per (dataset, seed, k, H).
+    Cache mean/W per (model, dataset, seed, k, H) via cache_dir.
     """
     cache_dir.mkdir(parents=True, exist_ok=True)
-    N, H = z.shape
-    k = min(int(k), H)
+    _, h = z.shape
+    k = min(int(k), h)
 
-    cache_path = cache_dir / f"pca_k{k}_H{H}.pt"
+    cache_path = cache_dir / f"pca_k{k}_H{h}.pt"
     if cache_path.exists():
         ck = torch.load(cache_path, map_location="cpu")
         mean, W = ck["mean"], ck["W"]
@@ -77,7 +77,7 @@ def pca_k(z: torch.Tensor, k: int, cache_dir: Path) -> np.ndarray:
         W = Vt[:k, :].T.contiguous()
         torch.save({"mean": mean, "W": W}, cache_path)
 
-    X = ((z - mean) @ W).numpy()  # [N,k]
+    X = ((z - mean) @ W).numpy()  # [N, k]
     return X
 
 
@@ -95,7 +95,7 @@ def compute_gray_scores(
 ) -> List[Tuple[int, float]]:
     """
     score(i) = alpha * |d1 - d2| + beta * max(d1, d2)
-    d*: squared L2 distance to community center.
+    d*: Euclidean distance to community center.
     Lower score => more gray.
     """
     C1 = list(C1)
@@ -110,9 +110,10 @@ def compute_gray_scores(
     for i in range(len(X)):
         if i in excluded:
             continue
+
         x = X[i]
-        d1 = float(np.sum((x - c1_center) ** 2))
-        d2 = float(np.sum((x - c2_center) ** 2))
+        d1 = float(np.linalg.norm(x - c1_center))
+        d2 = float(np.linalg.norm(x - c2_center))
         score = alpha * abs(d1 - d2) + beta * max(d1, d2)
         scores.append((i, score))
 
@@ -121,28 +122,33 @@ def compute_gray_scores(
 
 def main():
     p = argparse.ArgumentParser()
+    p.add_argument("--model", type=str, default="sgcn")
     p.add_argument("--dataset", required=True)
     p.add_argument("--seed", type=int, required=True)
     p.add_argument("--normalize", choices=["none", "l2"], default="none")
     args = p.parse_args()
 
-    dataset, seed = args.dataset, int(args.seed)
-    normalize = args.normalize
+    model = str(args.model)
+    dataset = str(args.dataset)
+    seed = int(args.seed)
+    normalize = str(args.normalize)
 
     k = load_k(dataset)
-    z = load_best_z(dataset, seed)
-    X = pca_k(z, k=k, cache_dir=RESULTS_GRAY / dataset / f"seed{seed}" / "aug" / "pca_cache")
+    z = load_best_z(model, dataset, seed)
+
+    aug_dir = RESULTS_GRAY / model / dataset / f"seed{seed}" / "aug"
+    X = pca_k(z, k=k, cache_dir=aug_dir / "pca_cache")
 
     if normalize == "l2":
         X = l2_normalize(X)
 
-    comms = load_kmeans_communities(dataset, seed)
+    comms = load_kmeans_communities(model, dataset, seed)
     ids = sorted(comms.keys())
     if not ids:
-        print(f"[WARN] no communities >= {MIN_COMM_SIZE} for {dataset}, seed={seed}")
+        print(f"[WARN] no communities >= {MIN_COMM_SIZE} for model={model}, dataset={dataset}, seed={seed}")
         return
 
-    out_root = RESULTS_GRAY / dataset / f"seed{seed}" / "aug" / "gray_node"
+    out_root = aug_dir / "gray_node"
     out_root.mkdir(parents=True, exist_ok=True)
 
     for a in range(len(ids)):
@@ -156,13 +162,16 @@ def main():
             df["community_1"] = c1
             df["community_2"] = c2
             df["normalize"] = normalize  # 기록용 태그
+            df["model"] = model
+            df["dataset"] = dataset
+            df["seed"] = seed
 
             out_path = out_root / f"pair_{c1}_{c2}.csv"
             df.to_csv(out_path, index=False)
 
     print(
-        f"✅ Gray node scores saved: dataset={dataset}, seed={seed}, "
-        f"k={k}, normalize={normalize}, pairs={len(ids)*(len(ids)-1)//2}"
+        f"✅ Gray node scores saved: model={model}, dataset={dataset}, seed={seed}, "
+        f"k={k}, normalize={normalize}, pairs={len(ids) * (len(ids) - 1) // 2}"
     )
 
 
