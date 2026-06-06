@@ -9,6 +9,7 @@ set -euo pipefail
 #   bash scripts/run_preprocessing.sh bitcoinalpha
 #   bash scripts/run_preprocessing.sh bitcoinotc wiki-Elec wiki-RfA
 #   bash scripts/run_preprocessing.sh --dataset Slashdot
+#   bash scripts/run_preprocessing.sh -d Epinions
 #
 # Notes:
 # - If no dataset is given, this script runs the default dataset: bitcoinalpha.
@@ -25,7 +26,7 @@ if [[ $# -eq 0 ]]; then
   DATASETS=("${DEFAULT_DATASETS[@]}")
 elif [[ "$1" == "--dataset" || "$1" == "-d" ]]; then
   if [[ $# -lt 2 ]]; then
-    echo "Error: --dataset requires a dataset name."
+    echo "Error: --dataset requires at least one dataset name."
     exit 1
   fi
   DATASETS=("${@:2}")
