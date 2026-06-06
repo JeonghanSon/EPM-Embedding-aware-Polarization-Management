@@ -11,6 +11,7 @@ from src.utils.paths import RESULTS_BASE, RESULTS_GRAY
 
 
 KEY_COLS = [
+    "model",
     "dataset",
     "gray_mode",
     "scope",
@@ -26,6 +27,7 @@ KEY_COLS = [
 AUG_KEY_COLS = KEY_COLS[:-1]  # exclude neg_scale (connect outputs do not depend on neg_scale)
 
 COMPARE_OUT_COLS = [
+    "model",
     "dataset",
     "gray_mode",
     "scope",
@@ -90,6 +92,7 @@ def _dir_escale(edge_scale: float) -> str:
 def run_dir_from_config(row: dict, seed: int) -> Path:
     return (
         RESULTS_GRAY
+        / str(row["model"])
         / str(row["dataset"])
         / f"gray_scale={row['gray_mode']}"
         / f"scope={row['scope']}"
@@ -133,7 +136,10 @@ def load_augmentation_stats(df_cfg: pd.DataFrame) -> pd.DataFrame:
 
 def build_summary_gray(deltas_path: Path, best_path: Path) -> pd.DataFrame:
     df_d = _read_csv(deltas_path, KEY_COLS + ["seed", "k", "gray_delta"])
-    df_b = _read_csv(best_path, KEY_COLS[:-1] + ["seed", "val_accuracy", "val_f1", "test_accuracy", "test_f1"])
+    df_b = _read_csv(
+        best_path,
+        KEY_COLS[:-1] + ["seed", "val_accuracy", "val_f1", "test_accuracy", "test_f1"]
+    )
 
     df_d["seed"] = pd.to_numeric(df_d["seed"], errors="coerce").astype("Int64")
     df_d["k"] = pd.to_numeric(df_d["k"], errors="coerce").astype("Int64")
@@ -179,7 +185,7 @@ def build_summary_gray(deltas_path: Path, best_path: Path) -> pd.DataFrame:
 
 
 def build_compare_base_gray(base_summary_path: Path, summary_gray: pd.DataFrame) -> pd.DataFrame:
-    base_req = ["dataset", "neg_scale", "base_delta_mean", "test_f1_mean"]
+    base_req = ["model", "dataset", "neg_scale", "base_delta_mean", "test_f1_mean"]
     df_b = _read_csv(base_summary_path, base_req).copy()
     df_b = df_b[base_req].copy()
     df_b["neg_scale"] = pd.to_numeric(df_b["neg_scale"], errors="coerce")
@@ -193,7 +199,7 @@ def build_compare_base_gray(base_summary_path: Path, summary_gray: pd.DataFrame)
     df_g["gray_test_f1_mean"] = pd.to_numeric(df_g["test_f1_mean"], errors="coerce")
     df_g = df_g.drop(columns=["test_f1_mean"])
 
-    df = df_g.merge(df_b, on=["dataset", "neg_scale"], how="left")
+    df = df_g.merge(df_b, on=["model", "dataset", "neg_scale"], how="left")
 
     df["delta_change"] = _safe_pct_change(df["gray_delta_mean"], df["base_delta_mean"])
     df["test_f1_change"] = _safe_pct_change(df["gray_test_f1_mean"], df["base_test_f1_mean"])
