@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 # src/delta/compute_deltas_gray.py
-# gray delta: (aug train edges + gray best_z) -> PCA(k) -> norm -> delta
-# small: build/cached L^dagger in run_dir -> delta_pinv_multi(L_pinv, X)
-# large: delta_solver_multi(edge_list, X)
+# gray delta: (aug train edges + gray best_z) -> PCA(k) -> RMS -> delta (solver-only)
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 
 import numpy as np
@@ -17,10 +14,9 @@ import torch
 from filelock import FileLock
 
 from src.utils.paths import RESULTS_GRAY, DATA_META
-from src.delta.delta import delta_pinv_multi, delta_solver_multi
+from src.delta.delta import delta_solver_multi
 
 EPS = 1e-12
-LARGE_DATASETS = {"Epinions", "Slashdot"}
 
 
 def load_k(dataset: str) -> int:
@@ -47,6 +43,7 @@ def _dir_escale(edge_scale: float) -> str:
 
 
 def gray_save_dir(
+    model: str,
     dataset: str,
     seed: int,
     gray_mode: str,
@@ -60,6 +57,7 @@ def gray_save_dir(
 ) -> Path:
     return (
         RESULTS_GRAY
+        / model
         / dataset
         / f"gray_scale={gray_mode}"
         / f"scope={scope}"
@@ -86,88 +84,21 @@ def read_aug_train_edges(run_dir: Path) -> list[tuple[int, int, float]]:
     return [(int(u), int(v), float(w)) for u, v, w in df.itertuples(index=False)]
 
 
-def dedup_keep_last_undirected(edge_list: list[tuple[int, int, float]]) -> list[tuple[int, int, float]]:
-    last: dict[tuple[int, int], float] = {}
-    for u, v, w in edge_list:
-        if w == 0:
-            continue
-        u = int(u); v = int(v)
-        if u == v:
-            continue
-        a, b = (u, v) if u < v else (v, u)
-        last[(a, b)] = float(w)  # file order = last
-    return [(a, b, w) for (a, b), w in last.items()]
-
-
-def laplacian_pinv_cached_in_run(
-    run_dir: Path,
-    num_nodes: int,
-    edge_list: list[tuple[int, int, float]],
-    neg_scale: float,
-) -> np.ndarray | None:
-    """
-    Build L = D - A using sign-scaled weights (+ -> 1.0, - -> neg_scale), then pinv(L).
-    Cached inside run_dir/laplacian_cache by neg_scale.
-    """
-    cache_dir = run_dir / "laplacian_cache"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-
-    key = f"neg{neg_scale}".replace(".", "p")
-    path = cache_dir / f"L_pinv_{key}.npy"
-    lock = FileLock(str(path) + ".lock")
-
-    with lock:
-        if path.exists():
-            try:
-                return np.load(path)
-            except Exception:
-                pass
-
-        try:
-            A = np.zeros((num_nodes, num_nodes), dtype=np.float64)
-            for u, v, w in edge_list:
-                if not (0 <= u < num_nodes and 0 <= v < num_nodes) or u == v:
-                    continue
-                w_adj = 1.0 if w > 0 else float(neg_scale)
-                A[u, v] += w_adj
-                A[v, u] += w_adj
-
-            L = np.diag(A.sum(axis=1)) - A
-            L_pinv = np.linalg.pinv(L)
-
-            tmp = path.with_suffix(f".tmp.{os.getpid()}")
-            with open(tmp, "wb") as f:
-                np.save(f, L_pinv)
-            os.replace(tmp, path)
-
-            return L_pinv
-        except Exception:
-            return None
-
-
 @torch.no_grad()
-def pca_k(z: torch.Tensor, k: int, cache_dir: Path) -> np.ndarray:
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    N, H = z.shape
-    k = int(min(k, H))
+def pca_k(z: torch.Tensor, k: int) -> np.ndarray:
+    _, h = z.shape
+    k = int(min(k, h))
     if k <= 0:
         raise ValueError("k must be positive")
 
-    cache_path = cache_dir / f"pca_k{k}_H{H}.pt"
-    if cache_path.exists():
-        ck = torch.load(cache_path, map_location="cpu")
-        mean = ck["mean"]
-        W = ck["W"]
-    else:
-        mean = z.mean(dim=0)
-        Zc = z - mean
-        _, _, Vt = torch.linalg.svd(Zc, full_matrices=False)
-        W = Vt[:k, :].T.contiguous()
-        torch.save({"mean": mean, "W": W}, cache_path)
+    mean = z.mean(dim=0)
+    Zc = z - mean
+    _, _, Vt = torch.linalg.svd(Zc, full_matrices=False)
+    W = Vt[:k, :].T.contiguous()
 
     X = ((z - mean) @ W).numpy()
-    rms = np.sqrt((X ** 2).mean())
-    return X / (rms + EPS)
+    n = np.linalg.norm(X, axis=1, keepdims=True)
+    return X / (n + EPS)
 
 
 def upsert_csv(path: Path, row: dict, key_cols: list[str]):
@@ -193,6 +124,7 @@ def upsert_csv(path: Path, row: dict, key_cols: list[str]):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--model", type=str, default="sgcn")
     ap.add_argument("--dataset", required=True)
     ap.add_argument("--seed", type=int, required=True)
 
@@ -209,11 +141,13 @@ def main():
     ap.add_argument("--neg_scale", type=float, default=0.1)
     args = ap.parse_args()
 
+    model = str(args.model)
     dataset = str(args.dataset)
     seed = int(args.seed)
     neg_scale = float(args.neg_scale)
 
     run_dir = gray_save_dir(
+        model=model,
         dataset=dataset,
         seed=seed,
         gray_mode=args.gray_mode,
@@ -230,6 +164,7 @@ def main():
     out_csv.parent.mkdir(parents=True, exist_ok=True)
 
     row_base = {
+        "model": model,
         "dataset": dataset,
         "seed": seed,
         "gray_mode": args.gray_mode,
@@ -252,23 +187,17 @@ def main():
 
         k = load_k(dataset)
         z = load_best_z(run_dir)
-        X = pca_k(z, k=k, cache_dir=run_dir / "projection_cache")
+        X = pca_k(z, k=k)
 
         edge_list = read_aug_train_edges(run_dir)
-
-        if dataset in LARGE_DATASETS:
-            gray_delta = delta_solver_multi(edge_list, X, pos=1.0, neg=neg_scale)
-        else:
-            dedup = dedup_keep_last_undirected(edge_list)
-            L_pinv = laplacian_pinv_cached_in_run(run_dir, num_nodes=X.shape[0], edge_list=dedup, neg_scale=neg_scale)
-            gray_delta = np.nan if L_pinv is None else delta_pinv_multi(L_pinv, X)
+        gray_delta = delta_solver_multi(edge_list, X, pos=1.0, neg=neg_scale)
 
         row = dict(row_base)
         row["k"] = int(k)
         row["gray_delta"] = float(gray_delta)
 
         upsert_csv(out_csv, row, key_cols)
-        print(f"✅ gray Δ: {dataset} seed={seed} neg={neg_scale} -> {gray_delta}")
+        print(f"✅ gray Δ: model={model} dataset={dataset} seed={seed} neg={neg_scale} -> {gray_delta}")
         return
 
     except Exception as e:
