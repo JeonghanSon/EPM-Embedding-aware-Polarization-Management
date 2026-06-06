@@ -1,42 +1,35 @@
 #!/usr/bin/env bash
 # scripts/run_mitigation_prep.sh
-# KMeans communities + PCS pairs + gray-node scoring (prep for mitigation)
+# Prepare KMeans communities, PCS pairs, and gray-node scores for EPM mitigation.
+
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-# -------------------------
-# Defaults
-# -------------------------
 SEEDS=(0)
 DATASETS=("bitcoinalpha")
 NEG_SCALE="0.1"
 
-# Datasets that should use the large-graph PCS pipeline
-LARGE_DATASETS=("Epinions" "Slashdot")
+LARGE_DATASETS=("Slashdot" "Epinions")
 
 usage() {
   cat <<EOF
 Usage: bash scripts/run_mitigation_prep.sh [options]
 
 Options:
-  --seeds "0 1 2"              Seeds (space-separated). Default: "${SEEDS[*]}"
-  --datasets "bitcoinalpha"    Datasets (space-separated). Default: "${DATASETS[*]}"
+  --seeds "0 1 2"              Seeds. Default: "${SEEDS[*]}"
+  --datasets "bitcoinalpha"    Datasets. Default: "${DATASETS[*]}"
   --neg-scale 0.1              Negative edge scale for PCS. Default: ${NEG_SCALE}
-
   -h, --help                   Show this help and exit.
 
 Examples:
   bash scripts/run_mitigation_prep.sh
   bash scripts/run_mitigation_prep.sh --datasets "bitcoinalpha bitcoinotc"
-  bash scripts/run_mitigation_prep.sh --datasets "Slashdot" --neg-scale 0.1
+  bash scripts/run_mitigation_prep.sh --datasets "Slashdot Epinions"
   bash scripts/run_mitigation_prep.sh --seeds "0 1 2 3 4" --datasets "bitcoinalpha"
 EOF
 }
 
-# -------------------------
-# Parse CLI args
-# -------------------------
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --seeds)
@@ -75,7 +68,7 @@ is_large_dataset() {
 }
 
 echo "============================================================"
-echo "Mitigation Prep Pipeline"
+echo "[MITIGATION PREP]"
 echo "  SEEDS     = ${SEEDS[*]}"
 echo "  DATASETS  = ${DATASETS[*]}"
 echo "  NEG_SCALE = ${NEG_SCALE}"
@@ -93,19 +86,28 @@ for seed in "${SEEDS[@]}"; do
     if is_large_dataset "${ds}"; then
       echo "[PCS_LARGE] dataset=${ds} seed=${seed} neg_scale=${NEG_SCALE}"
       echo "============================================================"
-      python -m src.gray.pcs_large --dataset "${ds}" --seed "${seed}" --neg_scale "${NEG_SCALE}"
+      python -m src.gray.pcs_large \
+        --dataset "${ds}" \
+        --seed "${seed}" \
+        --neg_scale "${NEG_SCALE}"
     else
       echo "[PCS] dataset=${ds} seed=${seed} neg_scale=${NEG_SCALE}"
       echo "============================================================"
-      python -m src.gray.pcs --dataset "${ds}" --seed "${seed}" --neg_scale "${NEG_SCALE}"
+      python -m src.gray.pcs \
+        --dataset "${ds}" \
+        --seed "${seed}" \
+        --neg_scale "${NEG_SCALE}"
     fi
 
     echo "============================================================"
     echo "[GRAY_NODES] dataset=${ds} seed=${seed} normalize=none"
     echo "============================================================"
-    python -m src.gray.gray_nodes --dataset "${ds}" --seed "${seed}" --normalize none
+    python -m src.gray.gray_nodes \
+      --dataset "${ds}" \
+      --seed "${seed}" \
+      --normalize none
   done
 done
 
 echo ""
-echo "✅ Mitigation prep finished"
+echo "[MITIGATION PREP] finished"
