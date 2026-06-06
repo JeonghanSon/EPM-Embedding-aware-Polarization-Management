@@ -161,7 +161,7 @@ def main():
             df = pd.DataFrame(scores, columns=["node_id", "score"])
             df["community_1"] = c1
             df["community_2"] = c2
-            df["normalize"] = normalize  # 기록용 태그
+            df["normalize"] = normalize 
             df["model"] = model
             df["dataset"] = dataset
             df["seed"] = seed
