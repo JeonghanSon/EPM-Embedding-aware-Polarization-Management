@@ -98,7 +98,6 @@ def load_kmeans_communities(
 
 
 @torch.no_grad()
-@torch.no_grad()
 def pca_k_l2(z: torch.Tensor, k: int, cache_dir: Path) -> np.ndarray:
     cache_dir.mkdir(parents=True, exist_ok=True)
 
