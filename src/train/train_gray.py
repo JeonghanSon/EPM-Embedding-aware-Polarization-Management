@@ -15,6 +15,10 @@ from src.utils.seed import set_seed
 from src.utils.paths import RESULTS_GRAY
 from src.train.train_sgcn import train_sgcn_for_signlink_class
 
+MODEL_REGISTRY = {
+    "sgcn": train_sgcn_for_signlink_class,
+}
+
 
 def _dir_selector(pair_selector: str, minmax_th: float, max_degree: float, topk: int | None) -> str:
     mm = f"mm{int(round(minmax_th * 100))}"
@@ -30,6 +34,7 @@ def _dir_escale(edge_scale: float) -> str:
 
 
 def gray_save_dir(
+    model: str,
     dataset: str,
     seed: int,
     gray_mode: str,
@@ -43,6 +48,7 @@ def gray_save_dir(
 ) -> Path:
     return (
         RESULTS_GRAY
+        / model
         / dataset
         / f"gray_scale={gray_mode}"
         / f"scope={scope}"
@@ -79,6 +85,7 @@ def upsert_best_csv(path: Path, row: dict, key_cols: list[str]):
 def main():
     p = argparse.ArgumentParser()
 
+    p.add_argument("--model", type=str, default="sgcn", choices=["sgcn"])
     p.add_argument("--dataset", required=True)
     p.add_argument("--seed", type=int, required=True)
 
@@ -108,10 +115,15 @@ def main():
 
     set_seed(int(args.seed))
 
-    dataset = args.dataset
+    model = str(args.model)
+    dataset = str(args.dataset)
     seed = int(args.seed)
 
+    if model not in MODEL_REGISTRY:
+        raise ValueError(f"Unsupported model: {model}")
+
     out_dir = gray_save_dir(
+        model=model,
         dataset=dataset,
         seed=seed,
         gray_mode=args.gray_mode,
@@ -136,16 +148,16 @@ def main():
     best_config = out_dir / "best_config.json"
 
     if best_z.exists() and best_model.exists() and best_metrics.exists() and best_config.exists() and not args.overwrite:
-        print(f"⏭️  Already exists (skip): {out_dir}  (use --overwrite)")
+        print(f"⏭️ Already exists (skip): {out_dir}  (use --overwrite)")
         return
 
     train_tag = (
-        f"gray_{args.gray_mode}_{args.scope}_{args.pair_selector}"
-        f"_mm{int(round(args.minmax*100))}"
+        f"gray_{model}_{args.gray_mode}_{args.scope}_{args.pair_selector}"
+        f"_mm{int(round(args.minmax * 100))}"
         f"_deg{('INF' if np.isinf(args.max_degree) or args.max_degree >= 1e9 else int(args.max_degree))}"
         f"_topk{int(args.topk) if args.topk is not None else 0}"
         f"_{args.setting}"
-        f"_esc{int(round(args.edge_scale*100))}"
+        f"_esc{int(round(args.edge_scale * 100))}"
     )
 
     tmp_root = out_dir / "_tmp_grid"
@@ -155,6 +167,7 @@ def main():
 
     best_row = None
     best_val_f1 = -1.0
+    train_fn = MODEL_REGISTRY[model]
 
     try:
         for dim in list(args.embedding_dims):
@@ -166,9 +179,9 @@ def main():
                         shutil.rmtree(run_dir, ignore_errors=True)
                     run_dir.mkdir(parents=True, exist_ok=True)
 
-                    print(f"[GRAY-TRAIN] {dataset} seed={seed} {run_name}")
+                    print(f"[GRAY-TRAIN] model={model} {dataset} seed={seed} {run_name}")
 
-                    metrics, artifacts = train_sgcn_for_signlink_class(
+                    metrics, artifacts = train_fn(
                         dataset=dataset,
                         save_dir=run_dir,
                         embedding_dim=int(dim),
@@ -179,9 +192,11 @@ def main():
                         seed=seed,
                         train_edge_csv=aug_train_csv,
                         train_tag=train_tag,
+                        model_name=model,
                     )
 
                     row = {
+                        "model": model,
                         "dataset": dataset,
                         "seed": seed,
                         "gray_mode": args.gray_mode,
@@ -216,6 +231,7 @@ def main():
                         shutil.copyfile(j_src, best_metrics)
 
                         cfg = {
+                            "model": model,
                             "dataset": dataset,
                             "seed": seed,
                             "gray_mode": args.gray_mode,
@@ -240,13 +256,17 @@ def main():
                     shutil.rmtree(run_dir, ignore_errors=True)
 
         if best_row is None:
-            raise RuntimeError(f"No valid best found (all val_f1 NaN?) for {dataset} seed={seed} at {out_dir}")
+            raise RuntimeError(f"No valid best found (all val_f1 NaN?) for model={model} dataset={dataset} seed={seed} at {out_dir}")
 
     finally:
         shutil.rmtree(tmp_root, ignore_errors=True)
 
     best_csv = RESULTS_GRAY / "best_embeddings.csv"
-    key_cols = ["dataset", "seed", "gray_mode", "scope", "pair_selector", "minmax", "max_degree", "topk", "setting", "edge_scale"]
+    key_cols = [
+        "model", "dataset", "seed",
+        "gray_mode", "scope", "pair_selector",
+        "minmax", "max_degree", "topk", "setting", "edge_scale",
+    ]
     upsert_best_csv(best_csv, best_row, key_cols)
 
     print(f"✅ Gray train done: {out_dir}")
