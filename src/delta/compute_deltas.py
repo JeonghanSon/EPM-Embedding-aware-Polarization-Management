@@ -89,7 +89,7 @@ def upsert_csv(path: Path, row: dict) -> None:
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--seed", type=int, required=True)
+    p.add_argument("--seed", type=int, default=0)
     p.add_argument("--model", type=str, default="sgcn")
     p.add_argument("--datasets", nargs="*", default=None)
     p.add_argument("--neg_scale", type=float, default=0.1)
