@@ -142,3 +142,8 @@ Main outputs are saved under `results/gray/`.
 - Validation and test edges are used only for evaluation; message passing uses training edges only.
 - Polarization measurement uses PCA-based opinion coordinates, node-wise L2 normalization, and a solver-based Laplacian computation.
 - Raw dataset files and generated result files are not included in this repository.
+
+
+## Supplementary Material
+
+The supplementary material is available at `supplementary/supplementary_material.pdf`.
