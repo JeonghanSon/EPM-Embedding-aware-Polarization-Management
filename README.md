@@ -12,12 +12,12 @@ Please refer to `data/README.md` for dataset sources and download instructions.
 
 Supported datasets:
 
-- `bitcoinalpha`
-- `bitcoinotc`
-- `wiki-RfA`
-- `wiki-Elec`
-- `Slashdot`
-- `Epinions`
+* `bitcoinalpha`
+* `bitcoinotc`
+* `wiki-RfA`
+* `wiki-Elec`
+* `Slashdot`
+* `Epinions`
 
 ## Quick Start
 
@@ -135,15 +135,37 @@ bash scripts/run_mitigation.sh \
 
 Main outputs are saved under `results/gray/`.
 
+## Reported Results
+
+We provide a precomputed summary CSV for the main mitigation results reported in Table 3 of the paper.
+
+* `paper_results/table3_main_mitigation.csv`: main EPM mitigation results.
+
+This file is included for quick inspection of the reported results. The pipeline scripts can be used to reproduce the underlying training, mitigation, and evaluation outputs from scratch.
+
+A compact view of the reported main mitigation results is shown below.
+
+| Dataset   | Delta Accuracy | Delta Macro-F1 | Delta Polarization |
+| --------- | -------------: | -------------: | -----------------: |
+| BTC-Alpha |         -5.45% |         -4.35% |            -23.01% |
+| BTC-OTC   |         -3.91% |         -3.78% |            -18.53% |
+| Wiki-Elec |         -3.49% |         -2.89% |            -32.05% |
+| Wiki-RfA  |         -3.65% |         -3.89% |            -42.41% |
+| Slashdot  |         -3.44% |         -2.60% |            -24.39% |
+| Epinions  |         -4.20% |         -3.98% |            -29.67% |
+
 ## Notes
 
-- The default scripts run a single representative configuration.
-- The paper experiments used multiple seeds and hyperparameter grid searches.
-- Validation and test edges are used only for evaluation; message passing uses training edges only.
-- Polarization measurement uses PCA-based opinion coordinates, node-wise L2 normalization, and a solver-based Laplacian computation.
-- Raw dataset files and generated result files are not included in this repository.
-
+* The default scripts run a single representative configuration.
+* The paper experiments used multiple seeds and hyperparameter grid searches.
+* Validation and test edges are used only for evaluation; message passing uses training edges only.
+* Polarization measurement uses PCA-based opinion coordinates, node-wise L2 normalization, and a solver-based Laplacian computation.
+* Raw dataset files and large intermediate files are not included in this repository.
+* A precomputed summary CSV for the main mitigation results is provided under `paper_results/`.
 
 ## Supplementary Material
 
 The supplementary material is available at `supplementary/supplementary_material.pdf`.
+
+```
+```
